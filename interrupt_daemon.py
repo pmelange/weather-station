@@ -7,11 +7,13 @@ except ImportError:
     import _thread as thread
 
 class interrupt_watcher(object):
-    def __init__(self, sensorPin, bounceTime, peak_sample = 5, peak_monitor = False):
+    def __init__(self, sensorPin, bounceTime, peak_sample = 1, peak_monitor = False):
         self.interrupt_count = 0
         self.running = True
         self.interrupt_peak_count = 0
         self.interrupt_peak_max = 0
+        self.interrupt_last_count = 0
+        self.sample_period = peak_sample
         
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(sensorPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -29,6 +31,12 @@ class interrupt_watcher(object):
         
     def get_peak(self):
         return self.interrupt_peak_max
+
+    def get_last(self):
+        return self.interrupt_last_count
+
+    def get_sample_period(self):
+        return self.sample_period
         
     def reset_count(self):
         self.interrupt_count = 0
@@ -38,6 +46,7 @@ class interrupt_watcher(object):
     def peak_monitor(self, sample_period):
         while self.running:
             time.sleep(sample_period)
+            self.interrupt_last_count = self.interrupt_peak_count
             if self.interrupt_peak_count > self.interrupt_peak_max:
                 self.interrupt_peak_max = self.interrupt_peak_count
             self.interrupt_peak_count = 0
@@ -47,7 +56,7 @@ class interrupt_watcher(object):
         
 class wind_speed_interrupt_watcher(interrupt_watcher):
     def __init__(self, radius_cm, sensorPin, bounceTime, calibration = 2.36):
-        super(wind_speed_interrupt_watcher, self).__init__(sensorPin, bounceTime, peak_sample = 5, peak_monitor = True)
+        super(wind_speed_interrupt_watcher, self).__init__(sensorPin, bounceTime, peak_sample = 1, peak_monitor = True)
         
         circumference_cm = (2 * math.pi) * radius_cm
         self.circumference = circumference_cm / 100000.0 #circumference in km
@@ -64,7 +73,10 @@ class wind_speed_interrupt_watcher(interrupt_watcher):
         return self.calculate_speed(self.get_value(), time.time() - self.last_time)
         
     def get_wind_gust_speed(self):
-        return self.calculate_speed(self.get_peak(), 5) #5 seconds
+        return self.calculate_speed(self.get_peak(), 1) #1 seconds
+
+    def get_last_wind_speed(self):
+        return self.calculate_speed(self.get_last(), self.get_sample_period())
         
     def reset_timer(self):
         self.last_time = time.time()
@@ -115,10 +127,12 @@ class interrupt_daemon(object):
                 data = data.strip()
                 if data == "RAIN":
                     self.send(conn, self.rain.get_rainfall())
-                elif data == "WIND":                    
+                elif data == "WIND":
                     self.send(conn, self.wind.get_wind_speed())
                 elif data == "GUST":
                     self.send(conn, self.wind.get_wind_gust_speed())
+                elif data == "LAST":
+                    self.send(conn, self.wind.get_last_wind_speed())
                 elif data == "RESET":
                     self.reset_counts()
                     self.send(conn, "OK")

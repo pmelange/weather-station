@@ -1,17 +1,5 @@
 #!/usr/bin/python3
 import MySQLdb, datetime, http.client, json, os
-import io
-import gzip
-
-
-def gunzip_bytes(bytes_obj):
-    in_ = io.BytesIO()
-    in_.write(bytes_obj)
-    in_.seek(0)
-    with gzip.GzipFile(fileobj=in_, mode='rb') as fo:
-        gunzipped_bytes_obj = fo.read()
-
-    return gunzipped_bytes_obj.decode()
 
 class mysql_database:
     def __init__(self):
@@ -166,8 +154,7 @@ class weather_database:
                     row["CREATED"].strftime("%Y-%m-%dT%H:%M:%S"))
 
                 if response_data != None and response_data != "-1":
-                    json_dict = json.loads(gunzip_bytes(response_data)) # 2019 post-apex upgrade change
-                    #json_dict = json.loads(response_data.decode()) # Python3 change
+                    json_dict = json.loads(response_data.decode()) # Python3 change
                     oracle_id = json_dict["ORCL_RECORD_ID"]
                     if self.is_number(oracle_id):
                         local_id = str(row["ID"])
@@ -177,3 +164,34 @@ class weather_database:
                     print("Bad response from Oracle")
         else:
             print("Nothing to upload")
+
+class sch8_weather_database:
+    def __init__(self):
+        self.db = mysql_database()
+        self.insert_template = "INSERT INTO SCH8_WEATHER_MEASUREMENT (ROOF_TEMPERATURE, CABINET_TEMPERATURE, AIR_QUALITY, AIR_PRESSURE, HUMIDITY, WIND_DIRECTION, WIND_SPEED, WIND_GUST_SPEED, RAINFALL, CREATED) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"
+        self.update_template =  "UPDATE SCH8_WEATHER_MEASUREMENT SET REMOTE_ID=%s WHERE ID=%s;"
+        self.upload_select_template = "SELECT * FROM SCH8_WEATHER_MEASUREMENT WHERE REMOTE_ID IS NULL;"
+
+    def is_number(self, s):
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+
+    def is_none(self, val):
+        return val if val != None else "NULL"
+
+    def insert(self, roof_temperature, cabinet_temperature, air_quality, air_pressure, humidity, wind_direction, wind_speed, wind_gust_speed, rainfall, created = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:00")):
+        params = ( roof_temperature,
+            cabinet_temperature,
+            air_quality,
+            air_pressure,
+            humidity,
+            wind_direction,
+            wind_speed,
+            wind_gust_speed,
+            rainfall,
+            created )
+        print(self.insert_template % params)
+        self.db.execute(self.insert_template, params)
