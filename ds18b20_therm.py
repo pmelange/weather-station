@@ -6,13 +6,19 @@ import os, glob, time
 # w1-therm
 
 class DS18B20(object):
-    def __init__(self):        
-        self.device_file = glob.glob("/sys/bus/w1/devices/28*")[0] + "/w1_slave"
+    def __init__(self, deviceid=None):
+        if deviceid is not None:
+            self.device_file = "/sys/bus/w1/devices/" + deviceid + "/w1_slave"
+        else:
+            self.device_file = glob.glob("/sys/bus/w1/devices/28*")[0] + "/w1_slave"
         
     def read_temp_raw(self):
-        f = open(self.device_file, "r")
-        lines = f.readlines()
-        f.close()
+        try:
+            f = open(self.device_file, "r")
+            lines = f.readlines()
+            f.close()
+        except:
+            lines = "XXXXXX"
         return lines
         
     def crc_check(self, lines):
@@ -21,23 +27,23 @@ class DS18B20(object):
     def read_temp(self):
         temp_c = -255
         attempts = 0
-        
-        lines = self.read_temp_raw()
-        success = self.crc_check(lines)
-        
-        while not success and attempts < 3:
+        success = 0
+
+        while not success and attempts < 10:
             time.sleep(.2)
             lines = self.read_temp_raw()            
             success = self.crc_check(lines)
             attempts += 1
-        
-        if success:
-            temp_line = lines[1]
-            equal_pos = temp_line.find("t=")            
-            if equal_pos != -1:
-                temp_string = temp_line[equal_pos+2:]
-                temp_c = float(temp_string)/1000.0
-        
+
+            if success:
+                temp_line = lines[1]
+                equal_pos = temp_line.find("t=")
+                if equal_pos != -1:
+                    temp_string = temp_line[equal_pos+2:]
+                    temp_c = float(temp_string)/1000.0
+                    if temp_c > 60.0:
+                        success = 0
+ 
         return temp_c
 
 if __name__ == "__main__":
